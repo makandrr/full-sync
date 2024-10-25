@@ -15,7 +15,7 @@ uploadButton.addEventListener('change', () => {
     const formData = new FormData();
     formData.append('media', file);
 
-    fetch('/upload', {
+    fetch('/api/upload', {
       method: 'POST',
       body: formData
     }).then((res) => {
@@ -27,7 +27,7 @@ uploadButton.addEventListener('change', () => {
 });
 
 function getState() {
-  fetch('/state')
+  fetch('/api/state')
     .then(response => response.json())
     .then(data => {
       if (data.file !== currentFile) {
@@ -54,7 +54,7 @@ function updateState() {
     playing: !mediaPlayer.paused,
     time: mediaPlayer.currentTime
   };
-  fetch('/update', {
+  fetch('/api/update', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
