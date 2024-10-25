@@ -1,7 +1,8 @@
 const uploadButton = document.getElementById('uploadButton');
 const mediaPlayer = document.getElementById('mediaPlayer');
 
-let ws = new WebSocket(`ws://${location.host}`);
+const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${protocol}://${location.host}`);
 let isSeeking = false;
 let isPlaying = false;
 let isInitiator = false;
