@@ -1,9 +1,18 @@
+// app.js
 const express = require('express');
-const http = require('http');
 const path = require('path');
 const multer  = require('multer');
-const WebSocket = require('ws');
 const fs = require('fs');
+const bodyParser = require('body-parser');
+
+const app = express();
+
+let currentFile = null;
+let playbackState = {
+  playing: false,
+  time: 0,
+  updatedAt: Date.now()
+};
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -16,67 +25,40 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
-
-let currentFile = null;
-let playbackState = {
-  playing: false,
-  time: 0
-};
-
 app.use(express.static('public'));
+
+app.use(bodyParser.json());
 
 app.post('/upload', upload.single('media'), (req, res) => {
   console.log('File loaded:', req.file.filename);
-  currentFile = '/uploads/' + req.file.filename;
+  currentFile = '/uploads/' + req.file.filename + '?t=' + Date.now();
   playbackState = {
     playing: false,
-    time: 0
+    time: 0,
+    updatedAt: Date.now()
   };
-  broadcast(JSON.stringify({ type: 'newFile', file: currentFile }));
   res.status(200).send('File loaded');
 });
 
-wss.on('connection', (ws) => {
-  console.log('Connected');
-
-  ws.send(JSON.stringify({ type: 'init', file: currentFile, playbackState }));
-
-  ws.on('message', (message) => {
-    console.log('Connected:', message);
-    const data = JSON.parse(message);
-    switch(data.type) {
-      case 'play':
-      case 'pause':
-      case 'seek':
-        playbackState = {
-          playing: data.type === 'play',
-          time: data.time
-        };
-        broadcast(JSON.stringify({
-          type: data.type,
-          time: data.time
-        }), ws);
-        break;
-    }
-  });
-
-  ws.on('close', () => {
-    console.log('Client disconnected');
+app.get('/state', (req, res) => {
+  res.json({
+    file: currentFile,
+    playbackState: playbackState
   });
 });
 
-function broadcast(data, exclude) {
-  wss.clients.forEach((client) => {
-    if (client !== exclude && client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  });
-}
+app.post('/update', (req, res) => {
+  const data = req.body;
+  console.log('Update:', data);
+  playbackState = {
+    playing: data.playing,
+    time: data.time,
+    updatedAt: Date.now()
+  };
+  res.status(200).send('Updated');
+});
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Started ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на порту ${PORT}`);
 });

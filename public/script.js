@@ -1,10 +1,12 @@
 const uploadButton = document.getElementById('uploadButton');
 const mediaPlayer = document.getElementById('mediaPlayer');
 
-const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-const ws = new WebSocket(`${protocol}://${location.host}`);
-let isSeeking = false;
-let isPlaying = false;
+let currentFile = null;
+let lastPlaybackState = {
+  playing: false,
+  time: 0,
+  updatedAt: 0
+};
 let isInitiator = false;
 
 uploadButton.addEventListener('change', () => {
@@ -19,94 +21,97 @@ uploadButton.addEventListener('change', () => {
     }).then((res) => {
       console.log('File loaded');
     }).catch((err) => {
-      console.error('File loading error:', err);
+      console.error('E:', err);
     });
   }
 });
 
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  switch(data.type) {
-    case 'init':
-      if (data.file) {
-        setMediaSource(data.file);
-        if (data.playbackState) {
-          mediaPlayer.currentTime = data.playbackState.time;
-          if (data.playbackState.playing) {
-            playMedia();
-          }
+function getState() {
+  fetch('/state')
+    .then(response => response.json())
+    .then(data => {
+      if (data.file !== currentFile) {
+        currentFile = data.file;
+        setMediaSource(currentFile);
+      }
+
+      if (data.playbackState.updatedAt > lastPlaybackState.updatedAt) {
+        lastPlaybackState = data.playbackState;
+        if (!isInitiator) {
+          synchronizePlayback(lastPlaybackState);
+        } else {
+          isInitiator = false;
         }
       }
-      break;
-    case 'newFile':
-      setMediaSource(data.file);
-      break;
-    case 'play':
-      if (!isPlaying) {
-        isInitiator = true;
-        mediaPlayer.currentTime = data.time;
-        playMedia();
-      }
-      break;
-    case 'pause':
-      if (isPlaying) {
-        isInitiator = true;
-        mediaPlayer.pause();
-      }
-      break;
-    case 'seek':
-      if (!isSeeking) {
-        isInitiator = true;
-        mediaPlayer.currentTime = data.time;
-      }
-      break;
+    })
+    .catch(error => {
+      console.error('Ошибка при получении состояния:', error);
+    });
+}
+
+function updateState() {
+  const state = {
+    playing: !mediaPlayer.paused,
+    time: mediaPlayer.currentTime
+  };
+  fetch('/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(state)
+  })
+    .then(response => {
+      isInitiator = false;
+    })
+    .catch(error => {
+      console.error('E:', error);
+    });
+}
+
+function synchronizePlayback(state) {
+  const timeDifference = Math.abs(mediaPlayer.currentTime - state.time);
+
+  if (timeDifference > 1) {
+    mediaPlayer.currentTime = state.time;
   }
-};
+
+  if (state.playing && mediaPlayer.paused) {
+    mediaPlayer.play().catch(() => {});
+  } else if (!state.playing && !mediaPlayer.paused) {
+    mediaPlayer.pause();
+  }
+}
 
 function setMediaSource(source) {
   mediaPlayer.src = source;
   mediaPlayer.load();
-}
 
-function playMedia() {
-  const playPromise = mediaPlayer.play();
-  if (playPromise !== undefined) {
-    playPromise.catch((error) => {
-      console.log('Autoplay blocked.', error);
-    });
-  }
+  mediaPlayer.onloadedmetadata = () => {
+    if (lastPlaybackState) {
+      mediaPlayer.currentTime = lastPlaybackState.time;
+      if (lastPlaybackState.playing) {
+        mediaPlayer.play().catch(() => {});
+      }
+    }
+  };
 }
 
 mediaPlayer.addEventListener('play', () => {
-  isPlaying = true;
-  if (!isInitiator) {
-    ws.send(JSON.stringify({ type: 'play', time: mediaPlayer.currentTime }));
-  }
-  isInitiator = false;
+  isInitiator = true;
+  updateState();
 });
 
 mediaPlayer.addEventListener('pause', () => {
-  isPlaying = false;
-  if (!isInitiator) {
-    ws.send(JSON.stringify({ type: 'pause', time: mediaPlayer.currentTime }));
-  }
-  isInitiator = false;
-});
-
-mediaPlayer.addEventListener('seeking', () => {
-  isSeeking = true;
+  isInitiator = true;
+  updateState();
 });
 
 mediaPlayer.addEventListener('seeked', () => {
-  if (!isInitiator) {
-    ws.send(JSON.stringify({ type: 'seek', time: mediaPlayer.currentTime }));
-  }
-  isSeeking = false;
-  isInitiator = false;
+  isInitiator = true;
+  updateState();
 });
 
-mediaPlayer.addEventListener('volumechange', () => {
-  if (mediaPlayer.muted === false) {
-    console.log('Sound on');
-  }
-});
+getState();
+
+setInterval(getState, 500);
