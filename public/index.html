@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>SYNC</title>
+    <style>
+        html {
+            background-color: #000;
+            color: #eee;
+        }
+
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+
+        #uploadButton {
+            margin: 20px;
+        }
+
+        #mediaPlayer {
+            width: 80%;
+            height: auto;
+        }
+
+        #playButton {
+            margin: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <input type="file" id="uploadButton" accept="video/*,audio/*">
+    <br>
+    <video id="mediaPlayer" controls muted></video>
+    <script src="script.js"></script>
+</body>
+
+</html>
